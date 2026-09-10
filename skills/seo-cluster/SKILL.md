@@ -173,6 +173,11 @@ Generate `cluster-map.html` using the template at `templates/cluster-map.html`.
 4. Write the completed HTML file to the output directory
 5. Inform user: "Open `cluster-map.html` in a browser to explore the interactive cluster map."
 
+## Sprachraum-Mandat (EU-Overlay)
+Keyword-, Cluster- und Intent-Recherche immer nativ im Zielsprachraum
+(`references/locale-research.md`). Niemals Keyword-Sets aus einer anderen
+Sprache übersetzen; SERP-Analyse nur aus Top-10 des Zielraums.
+
 ---
 
 ## Strategy Import
