@@ -68,9 +68,10 @@ Identify what SERP format Google rewards for this query: long-form guide, listic
 Apply the page-type template from `references/page-type-templates.md`, then customise based on competitor gaps and search intent.
 
 ## Sprachraum-Mandat (EU-Overlay)
-Keyword-, Cluster- und Intent-Recherche immer nativ im Zielsprachraum
-(`references/locale-research.md`). Niemals Keyword-Sets aus einer anderen
-Sprache übersetzen; SERP-Analyse nur aus Top-10 des Zielraums.
+Gilt ab dem ersten Schritt. Keyword-, Cluster- und Intent-Recherche immer
+nativ im Zielsprachraum (`references/locale-research.md`). Niemals
+Keyword-Sets aus einer anderen Sprache übersetzen; SERP-Analyse nur aus
+Top-10 des Zielsprachraums.
 
 ## Critical Rules
 
