@@ -177,6 +177,28 @@ def _python_range_message() -> str:
     )
 
 
+def _global_browser_dir() -> Path:
+    override = os.environ.get("PLAYWRIGHT_BROWSERS_PATH")
+    if override:
+        return Path(override).expanduser().resolve()
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Caches" / "ms-playwright"
+    elif sys.platform == "win32":
+        return Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local")) / "ms-playwright"
+    else:
+        return Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "ms-playwright"
+
+
+def _has_chromium(directory: Path) -> bool:
+    try:
+        return directory.is_dir() and any(
+            child.name.startswith(("chromium-", "chromium_headless_shell-"))
+            for child in directory.iterdir()
+        )
+    except OSError:
+        return False
+
+
 def _status(root: Path) -> dict[str, Any]:
     data_dir, mode = _data_dir(root)
     venv = data_dir / ".venv"
@@ -191,20 +213,15 @@ def _status(root: Path) -> dict[str, Any]:
     for key in ("runtime_schema", "requirements_sha256", "python"):
         if state.get(key) != expected[key]:
             reasons.append(f"{key} changed")
-    browser_dir = data_dir / "ms-playwright"
-    try:
-        browser_installed = browser_dir.is_dir() and any(
-            child.name.startswith(("chromium-", "chromium_headless_shell-"))
-            for child in browser_dir.iterdir()
-        )
-    except OSError:
-        browser_installed = False
+    local_browser_dir = data_dir / "ms-playwright"
+    global_browser_dir = _global_browser_dir()
+    browser_installed = _has_chromium(local_browser_dir) or _has_chromium(global_browser_dir)
     return {
         "ready": not reasons,
         "mode": mode,
         "python_version": expected["python"],
         "plugin_version": expected["plugin_version"],
-        "browser_ready": bool(state.get("browser_ready")) and browser_installed,
+        "browser_ready": (bool(state.get("browser_ready")) or browser_installed) and browser_installed,
         "reasons": reasons,
         "data_dir": data_dir,
         "venv": venv,
@@ -243,7 +260,12 @@ def _safe_env(status: dict[str, Any]) -> dict[str, str]:
     env = os.environ.copy()
     env["PYTHONUTF8"] = "1"
     env["PYTHONIOENCODING"] = "utf-8"
-    env["PLAYWRIGHT_BROWSERS_PATH"] = str(status["data_dir"] / "ms-playwright")
+    if "PLAYWRIGHT_BROWSERS_PATH" not in env:
+        local_browser = status["data_dir"] / "ms-playwright"
+        if _has_chromium(local_browser):
+            env["PLAYWRIGHT_BROWSERS_PATH"] = str(local_browser)
+        else:
+            env["PLAYWRIGHT_BROWSERS_PATH"] = str(_global_browser_dir())
     if sys.platform == "darwin":
         fallback = _darwin_library_fallback(env.get("DYLD_FALLBACK_LIBRARY_PATH"))
         if fallback:
