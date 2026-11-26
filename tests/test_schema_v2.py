@@ -188,6 +188,75 @@ def test_validate_emits_info_when_no_product_group() -> None:
     assert any("ProductGroup" in f["message"] for f in info)
 
 
+def test_validate_accepts_a_list_of_price_specifications() -> None:
+    """Offer.priceSpecification may be one object or a list. A list must not raise."""
+    product = _minimal_product()
+    product["offers"][0]["priceSpecification"] = [
+        {
+            "@type": "UnitPriceSpecification",
+            "price": 79.99,
+            "priceCurrency": "USD",
+            "validForMemberTier": {"@type": "MemberProgramTier", "name": "Gold"},
+        }
+    ]
+    result = ev.validate(product)
+    rules = [f["rule"] for f in result["findings"]]
+    assert "missing-member-program" not in rules
+
+
+def test_validate_price_specification_list_without_loyalty_is_reported() -> None:
+    product = _minimal_product()
+    product["offers"][0]["priceSpecification"] = [
+        {"@type": "UnitPriceSpecification", "price": 99.99, "priceCurrency": "USD"}
+    ]
+    result = ev.validate(product)
+    rules = [f["rule"] for f in result["findings"]]
+    assert "missing-member-program" in rules
+
+
+def test_validate_loyalty_price_accepts_list_valued_price_spec_type() -> None:
+    product = _minimal_product()
+    product["offers"][0]["priceSpecification"] = [
+        {
+            "@type": ["UnitPriceSpecification", "PriceSpecification"],
+            "price": 79.99,
+            "priceCurrency": "USD",
+            "validForMemberTier": {"@type": "MemberProgramTier", "name": "Gold"},
+        }
+    ]
+    result = ev.validate(product)
+    rules = [f["rule"] for f in result["findings"]]
+    assert "missing-member-program" not in rules
+
+
+def test_validate_reports_non_object_offers_without_crashing() -> None:
+    for bad_offer in ("https://example.com/offer", None, 42):
+        product = _minimal_product()
+        product["offers"].insert(0, bad_offer)
+        product["offers"][1]["hasMerchantReturnPolicy"] = {
+            "@type": "MerchantReturnPolicy",
+            "applicableCountry": "US",
+            "returnPolicyCategory": "https://schema.org/MerchantReturnFiniteReturnWindow",
+        }
+        result = ev.validate(product)
+        findings = {f["rule"]: f["severity"] for f in result["findings"]}
+        assert findings["malformed-offer"] == "High", bad_offer
+        assert result["ok"] is False
+        # The first offer that is an object still supplies the offer-level fallbacks.
+        assert "missing-return-policy" not in findings
+        assert "missing-shipping-details" in findings
+
+
+def test_validate_reports_offers_list_with_no_objects() -> None:
+    product = _minimal_product()
+    product["offers"] = ["https://example.com/offer"]
+    result = ev.validate(product)
+    rules = [f["rule"] for f in result["findings"]]
+    assert rules.count("malformed-offer") == 1
+    assert "missing-return-policy" in rules
+    assert "missing-shipping-details" in rules
+
+
 def test_validate_finds_offers_when_offers_is_single_dict() -> None:
     product = _minimal_product()
     product["offers"] = product["offers"][0]  # single dict, not list
@@ -279,8 +348,9 @@ def test_faq_rich_results_retirement_documented() -> None:
     assert "May 7, 2026" in schema_types, "schema-types must date the FAQ retirement"
     # QAPage offered as the replacement for genuine Q&A.
     assert "QAPage" in deprecated and "QAPage" in schema_types
-    # Google's faqpage doc cited as primary source.
-    assert "structured-data/faqpage" in deprecated
+    # Google's retirement notice cited as primary source. The old faqpage doc
+    # URL now 301-redirects to this changelog anchor (checked 2026-09-23).
+    assert "search/updates#removing-faq-rich-result" in deprecated
 
 
 def test_faqpage_guidance_does_not_claim_unconfirmed_benefits() -> None:
@@ -290,7 +360,6 @@ def test_faqpage_guidance_does_not_claim_unconfirmed_benefits() -> None:
     root = Path(__file__).resolve().parents[1]
     targets = [
         root / "hooks" / "validate-schema.py",
-        root / "pdf" / "google-seo-reference.md",
         root / "docs" / "TROUBLESHOOTING.md",
         root / "skills" / "seo-content-brief" / "references"
         / "page-type-templates.md",

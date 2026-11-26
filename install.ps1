@@ -9,12 +9,29 @@ Write-Host "|   Claude Code SEO Skill              |" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
+# Supported range. scripts/runtime.py (MIN_PYTHON, MAX_PYTHON) is the source
+# of truth; tests/test_python_range.py keeps this copy in step.
+$MinMinor = 11
+$MaxMinor = 14
+$script:SeenPython = @()
+
 function Resolve-Python {
+    # An override must be supported; it is never silently replaced.
+    if ($env:CLAUDE_SEO_PYTHON) {
+        return Test-PythonCandidate -Exe $env:CLAUDE_SEO_PYTHON -Args @()
+    }
+
+    # The default interpreter first, so an existing runtime keeps its Python.
+    # 'py -3' means the newest installed, which can be one we do not support yet.
     $candidates = @(
         @{ Exe = 'py'; Args = @('-3') },
         @{ Exe = 'python3'; Args = @() },
         @{ Exe = 'python'; Args = @() }
     )
+    for ($minor = $MaxMinor; $minor -ge $MinMinor; $minor--) {
+        $candidates += @{ Exe = 'py'; Args = @("-3.$minor") }
+        $candidates += @{ Exe = "python3.$minor"; Args = @() }
+    }
 
     foreach ($candidate in $candidates) {
         $resolved = Test-PythonCandidate -Exe $candidate.Exe -Args $candidate.Args
@@ -64,7 +81,7 @@ function Invoke-External {
 function Test-PythonCandidate {
     param(
         [Parameter(Mandatory = $true)][string]$Exe,
-        [Parameter(Mandatory = $true)][string[]]$Args
+        [string[]]$Args = @()
     )
 
     $pythonCmd = Get-Command -Name $Exe -ErrorAction SilentlyContinue
@@ -72,15 +89,18 @@ function Test-PythonCandidate {
         return $null
     }
 
-    $probeCode = 'import sys; print(sys.executable); print(sys.version.split()[0]); raise SystemExit(0 if sys.version_info >= (3, 10) else 1)'
+    $probeCode = "import sys; print(sys.executable); print(sys.version.split()[0]); raise SystemExit(0 if (3, $MinMinor) <= sys.version_info[:2] <= (3, $MaxMinor) else 1)"
     $probe = Invoke-External -Exe $Exe -Args @($Args + @('-c', $probeCode)) -Quiet
     $probeText = ($probe.Output -join "`n")
 
-    if ($probe.ExitCode -ne 0) {
+    if ($probeText -match 'Microsoft Store|WindowsApps|App execution alias|was not found') {
         return $null
     }
 
-    if ($probeText -match 'Microsoft Store|WindowsApps|App execution alias|was not found') {
+    if ($probe.ExitCode -ne 0) {
+        if ($probe.ExitCode -eq 1 -and $probe.Output.Count -ge 2 -and "$($probe.Output[1])" -match '^\d+\.\d+') {
+            $script:SeenPython += "$($probe.Output[1]) ($(@($Exe) + $Args -join ' '))"
+        }
         return $null
     }
 
@@ -90,7 +110,13 @@ function Test-PythonCandidate {
 # Check prerequisites
 $python = Resolve-Python
 if ($null -eq $python) {
-    Write-Host "[x] Python is required but was not found (tried 'py -3', 'python3', and 'python')." -ForegroundColor Red
+    $found = 'no Python'
+    if ($script:SeenPython.Count -gt 0) { $found = $script:SeenPython -join ', ' }
+    if ($env:CLAUDE_SEO_PYTHON) {
+        Write-Host "[x] CLAUDE_SEO_PYTHON must be Python 3.$MinMinor to 3.$MaxMinor. Found: $found." -ForegroundColor Red
+    } else {
+        Write-Host "[x] Claude SEO needs Python 3.$MinMinor to 3.$MaxMinor. Found: $found. Install Python 3.$MaxMinor from python.org or set CLAUDE_SEO_PYTHON." -ForegroundColor Red
+    }
     exit 1
 }
 
@@ -118,7 +144,7 @@ $RepoUrl = "https://github.com/AgriciDaniel/claude-seo"
 # This default MUST be bumped on every release. CI guard
 # (tests/test_manifest_consistency.py) enforces this matches plugin.json.
 # Override: $env:CLAUDE_SEO_TAG = 'main'; .\install.ps1
-$RepoTag = if ($env:CLAUDE_SEO_TAG) { $env:CLAUDE_SEO_TAG } else { 'v2.2.5' }
+$RepoTag = if ($env:CLAUDE_SEO_TAG) { $env:CLAUDE_SEO_TAG } else { 'v2.6.3' }
 
 # Create directories
 New-Item -ItemType Directory -Force -Path $SkillDir | Out-Null
@@ -197,12 +223,14 @@ try {
         Copy-Item -Recurse -Force "$ScriptsPath\*" $SkillScripts
     }
 
-    # Copy the stable launcher used by skill and agent instructions.
-    $BinPath = Join-Path $TempDir 'bin'
-    $SkillBin = Join-Path $SkillDir 'bin'
-    if (Test-Path (Join-Path $BinPath 'claude-seo')) {
-        New-Item -ItemType Directory -Force -Path $SkillBin | Out-Null
-        Copy-Item -Force (Join-Path $BinPath 'claude-seo') (Join-Path $SkillBin 'claude-seo')
+    # Copy the stable launcher used by skill and agent instructions. It ships in
+    # scripts/ (never a top-level bin/, which hosted marketplaces reject) and
+    # resolves runtime.py as a sibling, so it lands beside the copied scripts.
+    $LauncherSource = Join-Path $ScriptsPath 'claude-seo'
+    $SkillLauncherDir = Join-Path $SkillDir 'scripts'
+    if (Test-Path $LauncherSource) {
+        New-Item -ItemType Directory -Force -Path $SkillLauncherDir | Out-Null
+        Copy-Item -Force $LauncherSource (Join-Path $SkillLauncherDir 'claude-seo')
     }
 
     # Copy hooks
@@ -263,10 +291,12 @@ try {
         Copy-Item -Force $pluginManifest (Join-Path $SkillDir 'runtime-plugin.json')
     }
 
-    # Manual installs do not receive plugin bin/ PATH injection. Rewrite only
-    # the canonical runtime token in installed Markdown. Claude Code's Bash tool
-    # expands $HOME on Windows as well as Unix.
-    $manualRunner = '"$HOME/.claude/skills/seo/bin/claude-seo" run'
+    # Manual installs have no ${CLAUDE_PLUGIN_ROOT}. Rewrite the canonical
+    # launcher token in installed Markdown to the absolute installed path.
+    # Claude Code's Bash tool expands $HOME on Windows as well as Unix. The
+    # replacement consumes the plugin-root token, so a second pass is a no-op.
+    $pluginRunner = '"${CLAUDE_PLUGIN_ROOT}/scripts/claude-seo" run'
+    $manualRunner = '"$HOME/.claude/skills/seo/scripts/claude-seo" run'
     $installedDocs = @()
     Get-ChildItem -Path $SkillsPath -Directory | ForEach-Object {
         $sourceRoot = $_.FullName
@@ -306,11 +336,15 @@ try {
     $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
     $installedDocs | ForEach-Object {
         $text = [System.IO.File]::ReadAllText($_.FullName)
-        $manualSetup = '"$HOME/.claude/skills/seo/bin/claude-seo" setup'
-        $manualDoctor = '"$HOME/.claude/skills/seo/bin/claude-seo" doctor'
-        $updated = $text.Replace('claude-seo run', $manualRunner)
-        $updated = $updated.Replace('claude-seo setup', $manualSetup)
-        $updated = $updated.Replace('claude-seo doctor', $manualDoctor)
+        $pluginSetup = '"${CLAUDE_PLUGIN_ROOT}/scripts/claude-seo" setup'
+        $pluginDoctor = '"${CLAUDE_PLUGIN_ROOT}/scripts/claude-seo" doctor'
+        $manualSetup = '"$HOME/.claude/skills/seo/scripts/claude-seo" setup'
+        $manualDoctor = '"$HOME/.claude/skills/seo/scripts/claude-seo" doctor'
+        $updated = $text.Replace($pluginRunner, $manualRunner)
+        $updated = $updated.Replace($pluginSetup, $manualSetup)
+        $updated = $updated.Replace($pluginDoctor, $manualDoctor)
+        # Read-tool paths need the absolute skills directory, not a variable.
+        $updated = $updated.Replace('${CLAUDE_PLUGIN_ROOT}/skills/', (($env:USERPROFILE -replace '\\', '/') + '/.claude/skills/'))
         if ($updated -ne $text) {
             [System.IO.File]::WriteAllText($_.FullName, $updated, $utf8NoBom)
         }

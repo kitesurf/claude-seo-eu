@@ -4,9 +4,9 @@
 
 1. **Bing Webmaster Tools API**: inbound links, crawl stats, search
    keywords, and competitor link comparison via
-   `claude-seo run bing_webmaster.py` (already shipped with claude-seo).
+   `"${CLAUDE_PLUGIN_ROOT}/scripts/claude-seo" run bing_webmaster.py` (already shipped with claude-seo).
 2. **IndexNow URL submission** for Amazon, Bing, Naver, Seznam.cz,
-   Yandex, and Yep via `claude-seo run indexnow_submit.py`.
+   Yandex, and Yep via `"${CLAUDE_PLUGIN_ROOT}/scripts/claude-seo" run indexnow_submit.py`.
 3. A unified `seo-bing` skill that routes the right command at the
    right script.
 
@@ -16,6 +16,11 @@
 ./extensions/bing-webmaster/install.sh
 .\extensions\bing-webmaster\install.ps1
 ```
+
+The `seo-bing` skill ships with the claude-seo plugin, so on a plugin install
+the installer only stores your keys; run it from the plugin or repository
+folder. On a manual install (`~/.claude/skills/seo`) it also copies the skill
+with its launcher path set for that layout.
 
 You'll be prompted for:
 
@@ -51,7 +56,10 @@ guarantee indexing speed.
 ./extensions/bing-webmaster/uninstall.sh
 ```
 
-PowerShell manual removal:
+`uninstall.sh` removes the stored keys and, on a manual install, the copied
+skill. On a plugin install the skill stays, because the plugin provides it.
+
+PowerShell manual removal (skip the first line on a plugin install):
 ```powershell
 Remove-Item -Recurse -Force "$HOME\.claude\skills\seo-bing"
 notepad "$HOME\.claude\settings.json"

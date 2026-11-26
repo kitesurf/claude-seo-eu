@@ -13,7 +13,7 @@ Every skill in `skills/*/SKILL.md` is authored to a portable subset of the
 Claude Code skill spec. Validate compatibility with your harness via:
 
 ```bash
-./bin/claude-seo run portability_check.py
+./scripts/claude-seo run portability_check.py
 ```
 
 The check confirms each `SKILL.md` has the minimum frontmatter every harness
@@ -54,9 +54,9 @@ in case a recipe needs a specific call.
 
 ## Overview
 
-Claude SEO is a Tier 4 SEO analysis skill with 25 sub-skills (21 core + 1 orchestrator +
-1 framework integration + 2 extension mirrors), 18 sub-agents (15 core + 1 framework
-integration + 2 extension mirrors), and 53 Python execution scripts.
+Claude SEO is a Tier 4 SEO analysis skill with 29 sub-skills (22 core + 1 orchestrator +
+1 framework integration + 5 extension mirrors), 20 sub-agents (16 core + 1 framework
+integration + 3 extension mirrors), and 67 Python execution scripts.
 
 ## Quick Reference
 
@@ -95,7 +95,10 @@ integration + 2 extension mirrors), and 53 Python execution scripts.
 | `/seo bing [cmd] <url>` | Bing Webmaster data and IndexNow (extension) |
 | `/seo profound [cmd]` | LLM brand-citation tracking (extension) |
 | `/seo seranking [cmd]` | AI share-of-voice tracking (extension) |
+| `/seo matomo [cmd] [args]` | Matomo Reporting API: GA4 alternative or supplement (extension) |
+| `/seo posthog [cmd]` | PostHog via MCP: GA4 alternative or supplement (extension) |
 | `/seo unlighthouse <url>` | Multi-page Lighthouse audits (extension) |
+| `/seo shopify [crawl\|check] <url>` | Signed crawl of a Shopify store you administer, then the audit (extension) |
 
 ## Using with Cursor / Cursor Cloud
 
@@ -106,19 +109,19 @@ provide execution capabilities.
 **Running scripts directly** (Cursor doesn't have MCP):
 ```bash
 # Page fetching with SSRF protection
-./bin/claude-seo run fetch_page.py https://example.com
+./scripts/claude-seo run fetch_page.py https://example.com
 
 # HTML parsing for SEO elements
-./bin/claude-seo run parse_html.py https://example.com
+./scripts/claude-seo run parse_html.py --url https://example.com
 
 # PageSpeed Insights
-./bin/claude-seo run pagespeed_check.py https://example.com --json
+./scripts/claude-seo run pagespeed_check.py https://example.com --json
 
 # Drift baseline
-./bin/claude-seo run drift_baseline.py https://example.com
+./scripts/claude-seo run drift_baseline.py https://example.com
 
 # DataForSEO (requires credentials)
-DATAFORSEO_USERNAME=user DATAFORSEO_PASSWORD=pass ./bin/claude-seo run dataforseo_merchant.py search "keyword"
+DATAFORSEO_USERNAME=user DATAFORSEO_PASSWORD=pass ./scripts/claude-seo run dataforseo_merchant.py search "keyword"
 ```
 
 **Cursor Cloud gotchas:**
@@ -138,7 +141,7 @@ bash install.sh
 ## Architecture
 
 ```
-skills/                    # 25 sub-skills (auto-discovered)
+skills/                    # 29 sub-skills (auto-discovered)
   seo/SKILL.md            # Main orchestrator + routing
   seo-cluster/            # Semantic clustering (v1.9.0)
   seo-sxo/                # Search Experience Optimization (v1.9.0)
@@ -153,6 +156,7 @@ skills/                    # 25 sub-skills (auto-discovered)
   seo-sitemap/            # XML sitemaps
   seo-images/             # Image optimization
   seo-geo/                # AI search / GEO
+  seo-agentic/            # Agent readiness (Lighthouse Agentic Browsing, WebMCP)
   seo-local/              # Local SEO
   seo-maps/               # Maps intelligence
   seo-plan/               # Strategic planning
@@ -164,10 +168,13 @@ skills/                    # 25 sub-skills (auto-discovered)
   seo-flow/               # FLOW framework integration
   seo-dataforseo/         # DataForSEO (extension)
   seo-image-gen/          # AI images (extension)
-agents/                    # 18 subagents
-scripts/                   # 53 Python scripts, including the managed runtime
+  seo-bing/               # Bing Webmaster and IndexNow (extension)
+  seo-shopify/            # Shopify Crawler Access signed crawl (extension)
+  seo-posthog/            # PostHog analytics via MCP (extension)
+agents/                    # 20 subagents
+scripts/                   # 67 Python scripts, including the managed runtime
 schema/                    # JSON-LD templates
-extensions/                # 8 MCP extensions: DataForSEO, Firecrawl, Banana, Ahrefs, SE Ranking, Profound, Bing Webmaster, Unlighthouse
+extensions/                # 11 extensions. 5 MCP: DataForSEO, Firecrawl, Banana, Ahrefs, PostHog. 6 non-MCP: SE Ranking, Profound, Bing Webmaster, Matomo, Unlighthouse, Shopify
 ```
 
 ## Key Principles
@@ -175,7 +182,7 @@ extensions/                # 8 MCP extensions: DataForSEO, Firecrawl, Banana, Ah
 1. **Progressive Disclosure**: Read SKILL.md for routing, load references on demand
 2. **Industry Detection**: Auto-detect SaaS, e-commerce, local, publisher, agency
 3. **Security**: All scripts call `validate_url()` for SSRF protection
-4. **Config location**: `~/.config/claude-seo/` for API credentials
+4. **Config location**: `~/.config/claude-seo/` for API credentials, or the directory in `CLAUDE_SEO_PROFILE_DIR`
 
 ## Credits
 

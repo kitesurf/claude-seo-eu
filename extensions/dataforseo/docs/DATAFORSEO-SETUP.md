@@ -42,14 +42,14 @@ DataForSEO uses a credit-based system:
 
 ## 4. Manual MCP Configuration
 
-If the installer's auto-configuration fails, add this to `~/.claude/settings.json`:
+If the installer's auto-configuration fails, add this to `~/.claude.json`:
 
 ```json
 {
   "mcpServers": {
     "dataforseo": {
       "command": "npx",
-      "args": ["-y", "dataforseo-mcp-server"],
+      "args": ["-y", "dataforseo-mcp-server@2.8.10"],
       "env": {
         "DATAFORSEO_USERNAME": "<account-username>",
         "DATAFORSEO_PASSWORD": "your-api-password",

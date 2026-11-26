@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- **Python 3.10+** with pip
+- **Python 3.11 to 3.14** with pip. Python 3.10 reached end of life in October 2026, and 3.15 waits on the Google Ads client library
 - **Git** for cloning the repository
 - **Claude Code CLI** installed and configured
 
@@ -72,11 +72,17 @@ used by every skill. It creates `~/.claude/skills/seo/.venv/` and never falls
 back to global or user package installation.
 
 ```bash
-~/.claude/skills/seo/bin/claude-seo doctor
+~/.claude/skills/seo/scripts/claude-seo doctor
 ```
 
 If core setup failed, rerun the inspected installer. If only Chromium failed,
 the installer reports a degraded result and raw-fetch analysis remains available.
+
+Chromium runs with its sandbox wherever the system can start it. On Ubuntu
+23.10 and later, in most containers and as root it cannot, so pages are
+rendered without the sandbox and a warning says so (`"sandbox": false` in JSON
+results). Set `CLAUDE_SEO_CHROMIUM_REQUIRE_SANDBOX=1` to fail instead. See
+[Troubleshooting](TROUBLESHOOTING.md) for how to enable the sandbox.
 
 ## Installation Paths
 
@@ -87,7 +93,7 @@ The installer copies files to:
 | Main skill | `~/.claude/skills/seo/` |
 | Sub-skills | `~/.claude/skills/seo-*/` |
 | Subagents | `~/.claude/agents/seo-*.md` |
-| Runtime launcher | `~/.claude/skills/seo/bin/claude-seo` |
+| Runtime launcher | `~/.claude/skills/seo/scripts/claude-seo` |
 | Isolated Python | `~/.claude/skills/seo/.venv/` |
 
 ## Verify Installation
@@ -155,7 +161,7 @@ If the file doesn't exist, re-run the installer.
 Run the managed setup again:
 
 ```bash
-~/.claude/skills/seo/bin/claude-seo setup
+~/.claude/skills/seo/scripts/claude-seo setup
 ```
 
 ### Playwright screenshot errors
@@ -163,8 +169,8 @@ Run the managed setup again:
 Run the managed setup again and inspect the result:
 
 ```bash
-~/.claude/skills/seo/bin/claude-seo setup
-~/.claude/skills/seo/bin/claude-seo doctor
+~/.claude/skills/seo/scripts/claude-seo setup
+~/.claude/skills/seo/scripts/claude-seo doctor
 ```
 
 ### Permission errors on Unix
